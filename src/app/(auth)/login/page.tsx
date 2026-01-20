@@ -2,16 +2,23 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useUser, useAuth } from '@/firebase';
+import { useUser, useAuth, useFirestore } from '@/firebase';
 import { Button } from '@/components/ui/button';
-import { GoogleAuthProvider, signInWithRedirect, getRedirectResult } from 'firebase/auth';
+import {
+  GoogleAuthProvider,
+  signInWithRedirect,
+  getRedirectResult,
+  getAdditionalUserInfo,
+} from 'firebase/auth';
 import { Loader } from '@/components/layout/loader';
 import { Logo } from '@/components/logo';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { doc, setDoc } from 'firebase/firestore';
 
 export default function LoginPage() {
   const { user, isUserLoading: loading } = useUser();
   const auth = useAuth();
+  const firestore = useFirestore();
   const router = useRouter();
   const [isRedirecting, setIsRedirecting] = useState(true); // To handle redirect state
 
@@ -32,6 +39,16 @@ export default function LoginPage() {
           // This is the signed-in user from the redirect.
           // The onAuthStateChanged listener will handle the user state update,
           // and the next render cycle will redirect to the dashboard.
+          const additionalInfo = getAdditionalUserInfo(result);
+          if (additionalInfo?.isNewUser) {
+            const userDocRef = doc(firestore, 'users', result.user.uid);
+            setDoc(userDocRef, {
+              id: result.user.uid,
+              email: result.user.email,
+              name: result.user.displayName,
+              photoURL: result.user.photoURL,
+            }).catch(e => console.error("Error creating user doc on login:", e));
+          }
         } else {
           // No result, means user is on the login page without a pending redirect.
           // Ready to show the login button.
@@ -43,7 +60,7 @@ export default function LoginPage() {
         console.error('Failed to get redirect result', error);
         setIsRedirecting(false);
       });
-  }, [user, loading, router, auth]);
+  }, [user, loading, router, auth, firestore]);
 
   const handleLogin = async () => {
     const provider = new GoogleAuthProvider();
