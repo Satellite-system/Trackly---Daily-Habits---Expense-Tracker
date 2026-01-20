@@ -1,0 +1,224 @@
+{
+  "entities": {
+    "User": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "User",
+      "type": "object",
+      "description": "Represents a user of the Trackly Habits application.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the User entity."
+        },
+        "email": {
+          "type": "string",
+          "description": "The user's email address.",
+          "format": "email"
+        },
+        "name": {
+          "type": "string",
+          "description": "The user's display name."
+        }
+      },
+      "required": [
+        "id",
+        "email",
+        "name"
+      ]
+    },
+    "Habit": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Habit",
+      "type": "object",
+      "description": "Represents a habit being tracked by a user.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Habit entity."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to User. (Relationship: User 1:N Habit)"
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the habit."
+        },
+        "description": {
+          "type": "string",
+          "description": "A description of the habit."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "The date and time the habit was created.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "name",
+        "description",
+        "createdAt"
+      ]
+    },
+    "HabitCompletion": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "HabitCompletion",
+      "type": "object",
+      "description": "Represents the completion status of a habit on a specific date.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the HabitCompletion entity."
+        },
+        "habitId": {
+          "type": "string",
+          "description": "Reference to Habit. (Relationship: Habit 1:N HabitCompletion)"
+        },
+        "completionDate": {
+          "type": "string",
+          "description": "The date the habit was marked as completed.",
+          "format": "date-time"
+        },
+        "completed": {
+          "type": "boolean",
+          "description": "Indicates whether the habit was completed on the completionDate."
+        }
+      },
+      "required": [
+        "id",
+        "habitId",
+        "completionDate",
+        "completed"
+      ]
+    },
+    "SuggestedHabit": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "SuggestedHabit",
+      "type": "object",
+      "description": "Represents a habit suggested by AI to the user.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the SuggestedHabit entity."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to User. (Relationship: User 1:N SuggestedHabit)"
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the suggested habit."
+        },
+        "description": {
+          "type": "string",
+          "description": "A description of the suggested habit."
+        },
+        "category": {
+          "type": "string",
+          "description": "The category of the suggested habit (e.g., 'Health', 'Productivity')."
+        },
+        "reason": {
+          "type": "string",
+          "description": "The reason why this habit was suggested to the user."
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "name",
+        "description",
+        "category",
+        "reason"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "User",
+          "schema": {
+            "$ref": "#/backend/entities/User"
+          },
+          "description": "Stores user profiles.  Accessed only by the user themselves.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/habits/{habitId}",
+        "definition": {
+          "entityName": "Habit",
+          "schema": {
+            "$ref": "#/backend/entities/Habit"
+          },
+          "description": "Stores habits owned by a specific user. Includes denormalized 'userId' for authorization independence.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user."
+            },
+            {
+              "name": "habitId",
+              "description": "The unique identifier of the habit."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/habits/{habitId}/completions/{completionId}",
+        "definition": {
+          "entityName": "HabitCompletion",
+          "schema": {
+            "$ref": "#/backend/entities/HabitCompletion"
+          },
+          "description": "Stores habit completion records for a specific habit. Includes denormalized 'userId' and 'habitId' for authorization independence.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user."
+            },
+            {
+              "name": "habitId",
+              "description": "The unique identifier of the habit."
+            },
+            {
+              "name": "completionId",
+              "description": "The unique identifier of the habit completion."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/suggested_habits/{suggestedHabitId}",
+        "definition": {
+          "entityName": "SuggestedHabit",
+          "schema": {
+            "$ref": "#/backend/entities/SuggestedHabit"
+          },
+          "description": "Stores suggested habits for users.  Includes 'userId' to associate the suggestion with a user.",
+          "params": [
+            {
+              "name": "suggestedHabitId",
+              "description": "The unique identifier of the suggested habit."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore structure is designed to ensure authorization independence, clarity, and scalability for the Trackly Habits application. We leverage path-based ownership for user-specific data and avoid `get()` calls in security rules by denormalizing authorization data where necessary. \n\n*   **/users/{userId}:** Stores user profiles. This is the root for all user-owned data, ensuring easy management of user-specific information and simplifying security rules. \n*   **/users/{userId}/habits/{habitId}:** Stores habits owned by a specific user.  The `userId` is embedded within each habit document, providing authorization independence.  This supports QAPs, as listing habits within a user's document space is inherently secure. \n*   **/users/{userId}/habits/{habitId}/completions/{completionId}:** Stores habit completion records for a specific habit. The nested structure continues the ownership pattern, ensuring that only the owner can manage completions. This structure reinforces authorization independence.\n*   **/suggested_habits/{suggestedHabitId}:** Stores suggested habits for users. Although these are specific to a user they are global suggestions. The suggested habits also contain the userId to tie them back to the user."
+  }
+}

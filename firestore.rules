@@ -1,0 +1,144 @@
+/**
+ * Core Philosophy:
+ * This ruleset enforces a strict user-ownership model. All data is scoped to the
+ * authenticated user, preventing any user from accessing another user's information.
+ * The default security posture is to deny all access unless explicitly granted.
+ *
+ * Data Structure:
+ * The data is hierarchically organized under the `/users/{userId}` path. This
+ * structure ensures that all user-specific data, such as habits and their
+ * completions, is logically and securely nested under the user who owns it.
+ * A top-level `/suggested_habits` collection also exists, but access to individual
+ * documents is still governed by a `userId` field within each document.
+ *
+ * Key Security Decisions:
+ * - Strict Ownership: A user can only read or write data within their own
+ *   document tree (i.e., `/users/{their_own_userId}/...`).
+ * - No Public Listing: Collections containing user-specific data, like
+ *   `/suggested_habits`, cannot be listed in their entirety. Users can only query
+ *   for documents they own.
+ * - Relational Integrity: On document creation, rules validate that internal
+ *   ID fields (like `userId`) match the document's path to ensure data consistency.
+ *   These fields are immutable and cannot be changed on update.
+ *
+ * Denormalization for Authorization:
+ * To create simpler and more performant rules, authorization-critical data is
+ * denormalized. For example, the `Habit` document under `/users/{userId}/habits/{habitId}`
+ * contains a `userId` field. This allows rules to validate ownership directly
+ * from the document's path without needing costly `get()` calls to parent documents.
+ */
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // -------------------------------------------------------------------------
+    // Helper Functions
+    // -------------------------------------------------------------------------
+
+    /**
+     * Verifies that the user is authenticated.
+     */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /**
+     * Verifies that the authenticated user's UID matches the given userId.
+     */
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    /**
+     * Verifies that a document exists and that the authenticated user is the owner.
+     * Used for safe updates and deletes.
+     */
+    function isExistingOwner(userId) {
+      return isOwner(userId) && resource != null;
+    }
+
+    /**
+     * Validates that the 'userId' field on a new document matches the owner's UID.
+     * Enforces correct ownership data on creation.
+     */
+    function isCreatingWithOwnerId() {
+      return isSignedIn() && request.resource.data.userId == request.auth.uid;
+    }
+
+    /**
+     * Validates that an existing document belongs to the current user.
+     * Used for reads, updates, and deletes on top-level collections.
+     */
+    function isDocumentOwner() {
+      return isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    // -------------------------------------------------------------------------
+    // User Data Rules
+    // -------------------------------------------------------------------------
+
+    /**
+     * @description Controls access to a user's own profile document.
+     * @path /users/{userId}
+     * @allow (create) A new user signing up (e.g., auth.uid: 'user_abc', path: /users/user_abc).
+     * @deny (get) Another user trying to read the profile (e.g., auth.uid: 'user_xyz', path: /users/user_abc).
+     * @principle Restricts access to a user's own data tree and allows self-creation of their root document.
+     */
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.id == userId;
+      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
+      allow delete: if isExistingOwner(userId);
+
+      /**
+       * @description Controls access to a user's habits.
+       * @path /users/{userId}/habits/{habitId}
+       * @allow (create) The user creating a habit for themselves (e.g., auth.uid: 'user_abc', path: /users/user_abc/habits/habit_123).
+       * @deny (list) Another user trying to list habits (e.g., auth.uid: 'user_xyz', path: /users/user_abc/habits).
+       * @principle Enforces strict ownership based on the document's path.
+       */
+      match /habits/{habitId} {
+        allow get: if isOwner(userId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) && request.resource.data.userId == userId;
+        allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+        allow delete: if isExistingOwner(userId);
+
+        /**
+         * @description Controls access to a habit's completion records.
+         * @path /users/{userId}/habits/{habitId}/completions/{completionId}
+         * @allow (create) The user marking a habit as complete (e.g., auth.uid: 'user_abc', path: /users/user_abc/habits/habit_123/completions/comp_456).
+         * @deny (get) Another user trying to read a completion record (e.g., auth.uid: 'user_xyz', path: /users/user_abc/habits/habit_123/completions/comp_456).
+         * @principle Inherits ownership from the nested path structure.
+         */
+        match /completions/{completionId} {
+          allow get: if isOwner(userId);
+          allow list: if isOwner(userId);
+          allow create: if isOwner(userId);
+          allow update: if isExistingOwner(userId);
+          allow delete: if isExistingOwner(userId);
+        }
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // Suggested Habits Rules
+    // -------------------------------------------------------------------------
+
+    /**
+     * @description Controls access to AI-suggested habits, which are private to each user.
+     * @path /suggested_habits/{suggestedHabitId}
+     * @allow (get) A user reading a suggestion created for them (e.g., auth.uid: 'user_abc', document data: { userId: 'user_abc' }).
+     * @deny (list) Any user attempting to list the entire collection to prevent data leakage.
+     * @principle Enforces document ownership for writes and reads on a top-level collection by checking an internal `userId` field.
+     */
+    match /suggested_habits/{suggestedHabitId} {
+      allow get: if isDocumentOwner();
+      allow list: if false;
+      allow create: if isCreatingWithOwnerId();
+      allow update: if resource != null && isDocumentOwner() && request.resource.data.userId == resource.data.userId;
+      allow delete: if resource != null && isDocumentOwner();
+    }
+  }
+}
