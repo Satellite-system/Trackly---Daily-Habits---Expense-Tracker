@@ -20,60 +20,58 @@ export default function LoginPage() {
   const auth = useAuth();
   const firestore = useFirestore();
   const router = useRouter();
-  const [isRedirecting, setIsRedirecting] = useState(true); // To handle redirect state
+  const [isProcessingRedirect, setIsProcessingRedirect] = useState(true);
 
   useEffect(() => {
-    if (loading) {
-      return; // Wait until user state is determined
-    }
-
     if (user) {
       router.replace('/dashboard');
       return;
     }
 
-    // If no user, check for redirect result from Google Sign-In
-    getRedirectResult(auth)
-      .then((result) => {
-        if (result) {
-          // This is the signed-in user from the redirect.
-          // The onAuthStateChanged listener will handle the user state update,
-          // and the next render cycle will redirect to the dashboard.
-          const additionalInfo = getAdditionalUserInfo(result);
-          if (additionalInfo?.isNewUser) {
-            const userDocRef = doc(firestore, 'users', result.user.uid);
-            setDoc(userDocRef, {
-              id: result.user.uid,
-              email: result.user.email,
-              name: result.user.displayName,
-              photoURL: result.user.photoURL,
-            }).catch(e => console.error("Error creating user doc on login:", e));
+    // Only check for redirect result if the initial user load is complete and there's no user.
+    if (!loading && !user) {
+      getRedirectResult(auth)
+        .then((result) => {
+          if (result) {
+            // User signed in via redirect.
+            // The `onAuthStateChanged` listener will handle the user state update,
+            // and the `if (user)` block above will trigger the redirect.
+            const additionalInfo = getAdditionalUserInfo(result);
+            if (additionalInfo?.isNewUser) {
+              const userDocRef = doc(firestore, 'users', result.user.uid);
+              // Use a non-blocking write for performance
+              setDoc(userDocRef, {
+                id: result.user.uid,
+                email: result.user.email,
+                name: result.user.displayName,
+                photoURL: result.user.photoURL,
+              }).catch((e) =>
+                console.error('Error creating user doc on login:', e)
+              );
+            }
+            // Don't set isProcessingRedirect to false here, because we want to wait for the redirect to dashboard.
+          } else {
+            // No redirect result, so the user is just visiting the login page.
+            setIsProcessingRedirect(false);
           }
-        } else {
-          // No result, means user is on the login page without a pending redirect.
-          // Ready to show the login button.
-          setIsRedirecting(false);
-        }
-      })
-      .catch((error) => {
-        // Handle Errors here.
-        console.error('Failed to get redirect result', error);
-        setIsRedirecting(false);
-      });
-  }, [user, loading, router, auth, firestore]);
+        })
+        .catch((error) => {
+          console.error('Failed to get redirect result', error);
+          setIsProcessingRedirect(false);
+        });
+    }
+  }, [user, loading, auth, firestore, router]);
 
   const handleLogin = async () => {
     const provider = new GoogleAuthProvider();
-    // Redirect to Google's sign-in page. The browser will not return here.
     await signInWithRedirect(auth, provider);
   };
-  
-  // Show a loader while the initial user check and redirect check are in progress.
-  if (loading || isRedirecting) {
+
+  // Show a loader while checking for user or processing a redirect.
+  if (loading || isProcessingRedirect) {
     return <Loader fullScreen />;
   }
-  
-  // If we are not loading, not redirecting, and there is no user, show the login page.
+
   return (
     <div className="flex min-h-screen items-center justify-center p-4">
       <Card className="w-full max-w-md shadow-2xl">
