@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser, useAuth } from '@/firebase';
 import { Button } from '@/components/ui/button';
-import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithRedirect, getRedirectResult } from 'firebase/auth';
 import { Loader } from '@/components/layout/loader';
 import { Logo } from '@/components/logo';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,27 +13,50 @@ export default function LoginPage() {
   const { user, isUserLoading: loading } = useUser();
   const auth = useAuth();
   const router = useRouter();
+  const [isRedirecting, setIsRedirecting] = useState(true); // To handle redirect state
 
   useEffect(() => {
-    if (!loading && user) {
-      router.replace('/dashboard');
+    if (loading) {
+      return; // Wait until user state is determined
     }
-  }, [user, loading, router]);
 
-  if (loading || user) {
-    return <Loader fullScreen />;
-  }
+    if (user) {
+      router.replace('/dashboard');
+      return;
+    }
+
+    // If no user, check for redirect result from Google Sign-In
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result) {
+          // This is the signed-in user from the redirect.
+          // The onAuthStateChanged listener will handle the user state update,
+          // and the next render cycle will redirect to the dashboard.
+        } else {
+          // No result, means user is on the login page without a pending redirect.
+          // Ready to show the login button.
+          setIsRedirecting(false);
+        }
+      })
+      .catch((error) => {
+        // Handle Errors here.
+        console.error('Failed to get redirect result', error);
+        setIsRedirecting(false);
+      });
+  }, [user, loading, router, auth]);
 
   const handleLogin = async () => {
-    try {
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-      router.push('/dashboard');
-    } catch (error) {
-      console.error('Failed to sign in', error);
-    }
+    const provider = new GoogleAuthProvider();
+    // Redirect to Google's sign-in page. The browser will not return here.
+    await signInWithRedirect(auth, provider);
   };
-
+  
+  // Show a loader while the initial user check and redirect check are in progress.
+  if (loading || isRedirecting) {
+    return <Loader fullScreen />;
+  }
+  
+  // If we are not loading, not redirecting, and there is no user, show the login page.
   return (
     <div className="flex min-h-screen items-center justify-center p-4">
       <Card className="w-full max-w-md shadow-2xl">
