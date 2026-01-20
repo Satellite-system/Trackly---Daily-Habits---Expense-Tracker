@@ -36,7 +36,7 @@ function Dashboard() {
   const habits = habitsData ? habitsData.map(h => ({
     ...h,
     // Serialize dates for client components
-    createdAt: h.createdAt.toDate().toISOString(),
+    createdAt: h.createdAt?.toDate().toISOString(),
     completions: h.completions.map(c => c.toDate().toISOString()),
     userId: h.userId,
   })) : [];
