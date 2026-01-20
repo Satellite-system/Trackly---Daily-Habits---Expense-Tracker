@@ -1,9 +1,9 @@
 import type { Metadata } from 'next';
 import { PT_Sans } from 'next/font/google';
-import { AuthProvider } from '@/components/auth/auth-provider';
 import { Toaster } from '@/components/ui/toaster';
 import { cn } from '@/lib/utils';
 import './globals.css';
+import { FirebaseClientProvider } from '@/firebase';
 
 const ptSans = PT_Sans({
   subsets: ['latin'],
@@ -24,10 +24,10 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={cn('min-h-screen bg-background font-sans antialiased', ptSans.variable)}>
-        <AuthProvider>
+        <FirebaseClientProvider>
           {children}
           <Toaster />
-        </AuthProvider>
+        </FirebaseClientProvider>
       </body>
     </html>
   );

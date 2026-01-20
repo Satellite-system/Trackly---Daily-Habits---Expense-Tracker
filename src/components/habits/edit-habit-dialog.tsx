@@ -8,10 +8,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { updateHabitAction } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import type { Habit } from '@/lib/types';
 import { AddEditHabitForm, type HabitFormValues } from './add-edit-habit-form';
+import { useFirestore, useUser, updateDocumentNonBlocking } from '@/firebase';
+import { doc } from 'firebase/firestore';
 
 interface EditHabitDialogProps {
   habit: Habit;
@@ -22,11 +23,18 @@ interface EditHabitDialogProps {
 export function EditHabitDialog({ habit, open, onOpenChange }: EditHabitDialogProps) {
   const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
+  const firestore = useFirestore();
+  const { user } = useUser();
 
   const handleSubmit = (values: HabitFormValues) => {
-    startTransition(async () => {
+    if (!user || !firestore) return;
+    startTransition(() => {
       try {
-        await updateHabitAction(habit.id, values);
+        const habitDoc = doc(firestore, 'users', user.uid, 'habits', habit.id);
+        updateDocumentNonBlocking(habitDoc, {
+            name: values.name,
+            description: values.description || '',
+        });
         toast({
           title: 'Habit Updated!',
           description: `"${values.name}" has been updated.`,

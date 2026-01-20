@@ -11,10 +11,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { deleteHabitAction } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import type { Habit } from '@/lib/types';
 import { Loader } from '../layout/loader';
+import { useFirestore, useUser, deleteDocumentNonBlocking } from '@/firebase';
+import { doc } from 'firebase/firestore';
 
 interface DeleteHabitAlertProps {
   habit: Habit;
@@ -25,11 +26,15 @@ interface DeleteHabitAlertProps {
 export function DeleteHabitAlert({ habit, open, onOpenChange }: DeleteHabitAlertProps) {
   const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
+  const firestore = useFirestore();
+  const { user } = useUser();
 
   const handleDelete = () => {
-    startTransition(async () => {
+    if (!user || !firestore) return;
+    startTransition(() => {
       try {
-        await deleteHabitAction(habit.id);
+        const habitDoc = doc(firestore, 'users', user.uid, 'habits', habit.id);
+        deleteDocumentNonBlocking(habitDoc);
         toast({
           title: 'Habit Deleted',
           description: `"${habit.name}" has been removed.`,

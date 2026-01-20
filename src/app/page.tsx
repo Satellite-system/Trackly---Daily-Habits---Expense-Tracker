@@ -2,11 +2,11 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/lib/hooks/use-auth';
+import { useUser } from '@/firebase';
 import { Loader } from '@/components/layout/loader';
 
 export default function RootPage() {
-  const { user, loading } = useAuth();
+  const { user, isUserLoading: loading } = useUser();
   const router = useRouter();
 
   useEffect(() => {

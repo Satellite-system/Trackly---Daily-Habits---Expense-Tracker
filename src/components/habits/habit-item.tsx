@@ -12,8 +12,9 @@ import { cn } from '@/lib/utils';
 import { Button } from '../ui/button';
 import { EditHabitDialog } from './edit-habit-dialog';
 import { DeleteHabitAlert } from './delete-habit-alert';
-import { toggleHabitCompletionAction } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
+import { useFirestore, useUser, updateDocumentNonBlocking } from '@/firebase';
+import { doc, Timestamp } from 'firebase/firestore';
 
 interface HabitItemProps {
   habit: Habit;
@@ -24,6 +25,8 @@ export function HabitItem({ habit }: HabitItemProps) {
   const [isEditOpen, setEditOpen] = useState(false);
   const [isDeleteOpen, setDeleteOpen] = useState(false);
   const { toast } = useToast();
+  const firestore = useFirestore();
+  const { user } = useUser();
 
   const today = startOfDay(new Date());
   const isCompletedToday = habit.completions.some(
@@ -32,9 +35,29 @@ export function HabitItem({ habit }: HabitItemProps) {
   const { currentStreak } = calculateStreak(habit.completions.map(c => new Date(c)));
 
   const handleToggle = () => {
-    startTransition(async () => {
+    if (!user || !firestore) return;
+    startTransition(() => {
       try {
-        await toggleHabitCompletionAction(habit.id, habit.completions);
+        const habitDocRef = doc(firestore, 'users', user.uid, 'habits', habit.id);
+
+        const completionsTimestamps = habit.completions.map(c => Timestamp.fromDate(new Date(c)));
+
+        const todayCompletionIndex = completionsTimestamps.findIndex(
+          c => startOfDay(c.toDate()).getTime() === today.getTime()
+        );
+
+        if (todayCompletionIndex > -1) {
+          // Completed today, so remove it
+          completionsTimestamps.splice(todayCompletionIndex, 1);
+        } else {
+          // Not completed today, so add it
+          completionsTimestamps.push(Timestamp.fromDate(today));
+        }
+
+        updateDocumentNonBlocking(habitDocRef, {
+          completions: completionsTimestamps,
+        });
+
       } catch(error) {
         toast({
           variant: "destructive",

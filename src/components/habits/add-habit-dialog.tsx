@@ -5,14 +5,13 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { addHabitAction } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
-import { AddEditHabitForm, habitSchema, type HabitFormValues } from './add-edit-habit-form';
+import { AddEditHabitForm, type HabitFormValues } from './add-edit-habit-form';
+import { useFirestore, useUser, addDocumentNonBlocking } from '@/firebase';
+import { collection, serverTimestamp } from 'firebase/firestore';
 
 interface AddHabitDialogProps {
   open: boolean;
@@ -22,11 +21,25 @@ interface AddHabitDialogProps {
 export function AddHabitDialog({ open, onOpenChange }: AddHabitDialogProps) {
   const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
+  const firestore = useFirestore();
+  const { user } = useUser();
   
   const handleSubmit = (values: HabitFormValues) => {
-    startTransition(async () => {
+    if (!user || !firestore) {
+        toast({ variant: 'destructive', title: 'Error', description: 'You must be logged in to add a habit.' });
+        return;
+    }
+    startTransition(() => {
       try {
-        await addHabitAction(values);
+        const habitsCollection = collection(firestore, 'users', user.uid, 'habits');
+        addDocumentNonBlocking(habitsCollection, {
+            userId: user.uid,
+            name: values.name,
+            description: values.description || '',
+            createdAt: serverTimestamp(),
+            completions: [],
+        });
+
         toast({
           title: 'Habit Added!',
           description: `"${values.name}" is now on your list.`,

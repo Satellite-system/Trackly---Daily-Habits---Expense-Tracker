@@ -9,11 +9,13 @@ import * as z from 'zod';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { addHabitAction, getHabitSuggestionAction } from '@/app/actions';
+import { getHabitSuggestionAction } from '@/app/actions';
 import { Loader } from '@/components/layout/loader';
 import type { Habit } from '@/lib/types';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
+import { useFirestore, useUser, addDocumentNonBlocking } from '@/firebase';
+import { collection, serverTimestamp } from 'firebase/firestore';
 
 const FormSchema = z.object({
   userProfile: z.string().min(10, {
@@ -30,6 +32,8 @@ export function SuggestHabit({ habits }: SuggestHabitProps) {
   const [suggestion, setSuggestion] = useState<{ habitName: string; habitDescription: string; motivation: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
+  const firestore = useFirestore();
+  const { user } = useUser();
 
   const form = useForm<z.infer<typeof FormSchema>>({
     resolver: zodResolver(FormSchema),
@@ -52,10 +56,17 @@ export function SuggestHabit({ habits }: SuggestHabitProps) {
   };
 
   const handleAddHabit = () => {
-    if (!suggestion) return;
-    startTransition(async () => {
+    if (!suggestion || !user || !firestore) return;
+    startTransition(() => {
         try {
-            await addHabitAction({ name: suggestion.habitName, description: suggestion.habitDescription });
+            const habitsCollection = collection(firestore, 'users', user.uid, 'habits');
+            addDocumentNonBlocking(habitsCollection, {
+                userId: user.uid,
+                name: suggestion.habitName,
+                description: suggestion.habitDescription,
+                createdAt: serverTimestamp(),
+                completions: [],
+            });
             toast({
                 title: 'Habit Added!',
                 description: `"${suggestion.habitName}" has been added to your list.`,
@@ -102,13 +113,13 @@ export function SuggestHabit({ habits }: SuggestHabitProps) {
                 </FormItem>
               )}
             />
-            <Button type="submit" disabled={isPending} className="w-full">
+            <Button type="submit" disabled={isPending && !suggestion} className="w-full">
               {isPending && !suggestion ? <Loader /> : 'Get Suggestion'}
             </Button>
           </form>
         </Form>
 
-        {isPending && (
+        {isPending && !suggestion && (
           <div className="mt-4 flex items-center justify-center">
             <Loader />
           </div>

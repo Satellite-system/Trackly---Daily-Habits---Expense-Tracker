@@ -2,17 +2,16 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Github, Waves } from 'lucide-react';
-
-import { useAuth } from '@/lib/hooks/use-auth';
+import { useUser, useAuth } from '@/firebase';
 import { Button } from '@/components/ui/button';
-import { signInWithGoogle } from '@/lib/firebase/auth';
+import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { Loader } from '@/components/layout/loader';
 import { Logo } from '@/components/logo';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 export default function LoginPage() {
-  const { user, loading } = useAuth();
+  const { user, isUserLoading: loading } = useUser();
+  const auth = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -27,11 +26,11 @@ export default function LoginPage() {
 
   const handleLogin = async () => {
     try {
-      await signInWithGoogle();
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
       router.push('/dashboard');
     } catch (error) {
       console.error('Failed to sign in', error);
-      // You might want to show a toast notification here
     }
   };
 
